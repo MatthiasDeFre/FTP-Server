@@ -1,4 +1,5 @@
 ﻿using System;
+using FTPServer.Domain;
 
 namespace FTPServer
 {
@@ -7,6 +8,9 @@ namespace FTPServer
         static void Main(string[] args)
         {
             Console.WriteLine("Hello World!");
+            FtpServer server = new FtpServer();
+            server.Start();
+            Console.ReadLine();
         }
     }
 }
