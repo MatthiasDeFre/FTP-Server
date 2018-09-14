@@ -23,7 +23,7 @@ namespace FTPServer.Domain
         private StreamReader _dataReader;
         private NetworkStream _dataStream;
 
-        private string _username;
+        public string Username;
         private string _transerferType;
         private string _currentDirectory;
 
@@ -187,7 +187,7 @@ namespace FTPServer.Domain
 
         private string User(string username)
         {
-            _username = username;
+            Username = username;
 
             return "331 Username ok, need password";
         }
@@ -195,7 +195,7 @@ namespace FTPServer.Domain
         private string Password(string password)
         {
             //Check for corrrect password
-            return $"210 User logged in {_username}";
+            return $"210 User logged in {Username}";
      
         }
 
