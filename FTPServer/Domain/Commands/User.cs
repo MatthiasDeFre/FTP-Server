@@ -10,11 +10,11 @@ namespace FTPServer.Domain.Commands
         public User(ClientConnection clientConnection) : base(clientConnection)
         {
         }
-        public override Response Execute(string username)
+        public override string Execute(string username)
         {
             ClientConnection.Username = username;
 
-            return Response.User;
+            return Response.User.Get();
         }
 
        

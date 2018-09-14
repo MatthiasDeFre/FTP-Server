@@ -12,6 +12,6 @@ namespace FTPServer.Domain.Commands
         {
             ClientConnection = clientConnection;
         }
-        public abstract Response Execute(string arguments);
+        public abstract string Execute(string arguments);
     }
 }

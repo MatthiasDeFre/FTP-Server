@@ -6,56 +6,75 @@ using System.Net.Sockets;
 using System.Reflection.Metadata;
 using System.Security.Cryptography;
 using System.Text;
+using FTPServer.Domain.Commands;
+using FTPServer.Domain.Enums;
 
 namespace FTPServer.Domain
 {
     public class ClientConnection
     {
-        private TcpClient _controlClient;
-        private TcpClient _dataClient;
-        private NetworkStream _controlStream;
-        private StreamWriter _controlWriter;
-        private StreamReader _controlReader;
-        private TcpListener _passiveListener;
-        private DataConnectionType _dataConnectionType = DataConnectionType.Active;
-        private IPEndPoint _dataEndPoint;
-        private StreamWriter _dataWriter;
-        private StreamReader _dataReader;
-        private NetworkStream _dataStream;
+        public TcpClient ControlClient;
+        public TcpClient DataClient;
+        public NetworkStream ControlStream;
+        public StreamWriter ControlWriter;
+        public StreamReader ControlReader;
+        public TcpListener PassiveListener;
+        public DataConnectionType DataConnectionType = DataConnectionType.Active;
+        public IPEndPoint DataEndPoint;
+        public StreamWriter StreamWriter;
+        public StreamReader StreamReader;
+        public NetworkStream NetworkStream;
 
         public string Username;
-        private string _transerferType;
-        private string _currentDirectory;
+        public TransferType TranserferType;
+        public string CurrentDirectory;
+
+        private Dictionary<string,Command> _commands;
 
 
         public ClientConnection(TcpClient tcpClient)
         {
-            _controlClient = tcpClient;
-            _controlStream = _controlClient.GetStream();
-            _controlWriter = new StreamWriter(_controlStream);
-            _controlReader = new StreamReader(_controlStream);
+            ControlClient = tcpClient;
+            ControlStream = ControlClient.GetStream();
+            ControlWriter = new StreamWriter(ControlStream);
+            ControlReader = new StreamReader(ControlStream);
+            _commands = new Dictionary<string, Command>();
 
+            //TO DO Lazy load
+            _commands.Add("USER", new User(this));
+            _commands.Add("PASS", new Password(this));
+            _commands.Add("CWD", new ChangeCurrentDirectory(this));
+            _commands.Add("CDUP", new ChangeCurrentDirectory(this, ".."));
         }
 
         public void HandleClient(object obj)
         {
-            _controlWriter.WriteLine("220 Connected");
-            _controlWriter.Flush();
+            ControlWriter.WriteLine("220 Connected");
+            ControlWriter.Flush();
 
             string line;
 
             try
             {
-                while (!string.IsNullOrWhiteSpace(line = _controlReader.ReadLine()))
+                while (!string.IsNullOrWhiteSpace(line = ControlReader.ReadLine()))
                 {
                     string response = null;
                     line = line.Trim();
                     string[] command = line.Split(" ");
                     string cmd = command[0].ToUpperInvariant();
                     string arguments = command.Length > 1 ? line.Substring(command[0].Length + 1) : null;
+                    Command commandEx;
                     if (response == null)
                     {
-                        switch (cmd)
+                        if (_commands.TryGetValue(cmd, out commandEx))
+                        {
+                            response =commandEx.Execute(arguments);
+                        }
+                        else
+                        {
+                            response = "504 not found";
+                        }
+                       /* switch (cmd)
                         {
                             case "USER":
                                 response = User(arguments);
@@ -91,16 +110,16 @@ namespace FTPServer.Domain
                             default:
                                 response = "Not found";
                                 break;
-                        }
+                        }*/
                     }
-                    if (_controlClient == null || !_controlClient.Connected)
+                    if (ControlClient == null || !ControlClient.Connected)
                     {
                         break;
                     }
                     else
                     {
-                        _controlWriter.WriteLine(response);
-                        _controlWriter.Flush();
+                        ControlWriter.WriteLine(response);
+                        ControlWriter.Flush();
                         if (response.StartsWith("221"))
                             break;
 
@@ -118,53 +137,53 @@ namespace FTPServer.Domain
         {
             if (pathname == null)
                 pathname = string.Empty;
-            pathname = new DirectoryInfo(Path.Combine(_currentDirectory, pathname)).FullName;
+            pathname = new DirectoryInfo(Path.Combine(CurrentDirectory, pathname)).FullName;
 
-            if (_dataConnectionType == DataConnectionType.Active)
+            if (DataConnectionType == DataConnectionType.Active)
             {
-                _dataClient = new TcpClient();
-                _dataEndPoint = (IPEndPoint) _dataClient.Client.LocalEndPoint;
-                _dataClient.BeginConnect(_dataEndPoint.Address, _dataEndPoint.Port, DoList, pathname);
+                DataClient = new TcpClient();
+                DataEndPoint = (IPEndPoint) DataClient.Client.LocalEndPoint;
+                DataClient.BeginConnect(DataEndPoint.Address, DataEndPoint.Port, DoList, pathname);
             }
             else
             {
-                _passiveListener.BeginAcceptTcpClient(DoList, pathname);
+                PassiveListener.BeginAcceptTcpClient(DoList, pathname);
             }
             return "150 opening";
         }
 
         private void DoList(IAsyncResult result)
         {
-            if (_dataConnectionType ==DataConnectionType.Active)
+            if (DataConnectionType ==DataConnectionType.Active)
             {
-                _dataClient.EndConnect(result);
+                DataClient.EndConnect(result);
             }
             else
             {
-                _dataClient = _passiveListener.EndAcceptTcpClient(result);
+                DataClient = PassiveListener.EndAcceptTcpClient(result);
             }
             string pathname = (string) result.AsyncState;
-            _dataStream = _dataClient.GetStream();
+            NetworkStream = DataClient.GetStream();
 
-            _dataReader = new StreamReader(_dataStream, Encoding.ASCII);
-            _dataWriter = new StreamWriter(_dataStream, Encoding.ASCII);
+            StreamReader = new StreamReader(NetworkStream, Encoding.ASCII);
+            StreamWriter = new StreamWriter(NetworkStream, Encoding.ASCII);
 
         }
 
         private string Passive(string arguments)
         {
-            IPAddress localAddress = ((IPEndPoint) _controlClient.Client.LocalEndPoint).Address;
-            _passiveListener = new TcpListener(localAddress, 0);
-            _passiveListener.Start();
+            IPAddress localAddress = ((IPEndPoint) ControlClient.Client.LocalEndPoint).Address;
+            PassiveListener = new TcpListener(localAddress, 0);
+            PassiveListener.Start();
 
-            IPEndPoint localEndPoint = ((IPEndPoint) _passiveListener.LocalEndpoint);
+            IPEndPoint localEndPoint = ((IPEndPoint) PassiveListener.LocalEndpoint);
             byte[] address = localEndPoint.Address.GetAddressBytes();
             short port = (short) localEndPoint.Port;
 
             byte[] portArray = BitConverter.GetBytes(port);
             if(BitConverter.IsLittleEndian)
                 Array.Reverse(portArray);
-            _dataConnectionType = DataConnectionType.Passive;
+            DataConnectionType = DataConnectionType.Passive;
             return string.Format("227 Entering passive mode on ({0},{1},{2},{3},{4},{5})", address[0], address[1], address[2], address[3],
                 portArray[0], portArray[1]);
            
@@ -181,7 +200,7 @@ namespace FTPServer.Domain
 
         private string ChangeCurrentWorkingDirectory(string directory)
         {
-            _currentDirectory = directory;
+            CurrentDirectory = directory;
             return "250 changed to new directory";
         }
 
@@ -199,14 +218,14 @@ namespace FTPServer.Domain
      
         }
 
-        private String Type(string typecode, string formatcontrol)
+     /*   private String Type(string typecode, string formatcontrol)
         {
             string response = "";
             switch (typecode)
             {
                 case "A":
                 case "I":
-                    _transerferType = typecode;
+                    TranserferType = typecode;
                     response = "200 ok";
                     break;
                 default:
@@ -228,7 +247,7 @@ namespace FTPServer.Domain
 
             }
             return response;
-        }
+        }*/
         
     }
 }

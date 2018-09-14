@@ -6,6 +6,17 @@ namespace FTPServer.Domain.Enums
 {
     public enum Response
     {
-        User
+        User,
+        Password,
+        Directory,
+        PresentDirectory,
+        Quit,
+        Port,
+        Passive,
+        Type,
+        Ok,
+        InvalidUserOrPass,
+        InvalidDirectory,
+        NotSupported
     }
 }
